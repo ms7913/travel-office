@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Travel Office">
+<title>Travel Office</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Inter', system-ui, sans-serif; background: #f1f5f9; -webkit-tap-highlight-color: transparent; }
+  .field { width: 100%; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 9px 12px; font-size: 14px; color: #0f172a; transition: border-color .15s, box-shadow .15s; }
+  .field:focus { outline: none; border-color: #0ea5e9; box-shadow: 0 0 0 3px rgba(14,165,233,.15); }
+  .field::placeholder { color: #94a3b8; }
+  textarea.field { resize: none; overflow: hidden; line-height: 1.45; }
+  .money { text-align: right; font-weight: 700; color: #047857; font-variant-numeric: tabular-nums; }
+  .lbl { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: #64748b; margin-bottom: 4px; }
+  .card { background: #fff; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(15,23,42,.05); }
+  .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 10px; transition: filter .15s, background .15s; }
+  .chip:hover { filter: brightness(.96); }
+  .icon-btn { width: 34px; height: 34px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; color: #475569; background: #fff; border: 1px solid #e2e8f0; }
+  .icon-btn:hover { background: #f8fafc; }
+  .icon-btn:disabled { opacity: .35; cursor: not-allowed; }
+  .btn-primary { background: #0284c7; color: #fff; font-weight: 700; padding: 11px 18px; border-radius: 12px; font-size: 14px; white-space: nowrap; box-shadow: 0 4px 12px rgba(2,132,199,.25); }
+  .btn-primary:hover { background: #0369a1; }
+  .btn-ghost { background: #f1f5f9; color: #0f172a; font-weight: 700; padding: 11px 16px; border-radius: 12px; font-size: 14px; white-space: nowrap; }
+  summary { list-style: none; cursor: pointer; }
+  summary::-webkit-details-marker { display: none; }
+  .chev { transition: transform .2s; color: #94a3b8; }
+  details[open] > summary .chev { transform: rotate(180deg); }
+  .day-anchor { scroll-margin-top: 130px; }
+  .drag-over { outline: 2px dashed #0ea5e9; outline-offset: 2px; }
+  .hide-scroll { scrollbar-width: none; }
+  .hide-scroll::-webkit-scrollbar { display: none; }
+
+  /* ---------- PDF / Druck ---------- */
+  #print-root { display: none; font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #111; line-height: 1.4; }
+  .pr-head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f172a; padding-bottom: 6px; margin-bottom: 18px; }
+  .pr-brand { font-size: 15pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+  .pr-doc { font-size: 10pt; color: #475569; }
+  .pr-title { font-size: 18pt; font-weight: bold; margin-bottom: 8px; }
+  .pr-meta { margin-bottom: 14px; border-collapse: collapse; }
+  .pr-meta td { padding: 1px 14px 1px 0; vertical-align: top; }
+  .pr-meta td:first-child { font-weight: bold; width: 110px; }
+  .pr-address { white-space: pre-line; margin: 22px 0 18px; }
+  .pr-intro { white-space: pre-line; margin-bottom: 18px; }
+  .pr-h2 { font-size: 11pt; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 3px; margin: 18px 0 4px; }
+  .pr-table { width: 100%; border-collapse: collapse; }
+  .pr-table td { vertical-align: top; padding: 6px 0 8px; border-bottom: 1px solid #e5e7eb; }
+  .pr-date { width: 21%; font-weight: bold; padding-right: 10px !important; }
+  .pr-sub { color: #475569; font-size: 8.5pt; }
+  .pr-total td { font-weight: bold; font-size: 10.5pt; border-top: 1.5px solid #000; border-bottom: none; }
+  .pr-box { border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px 10px; white-space: pre-line; }
+  .pr-foot { margin-top: 26px; font-size: 8pt; color: #64748b; }
+  .r { text-align: right; white-space: nowrap; }
+
+  @media print {
+    @page { size: A4; margin: 15mm 15mm 16mm; }
+    html, body { background: #fff !important; }
+    #app, #loading, #login-screen, #pdf-modal, #toast { display: none !important; }
+    #print-root { display: block !important; }
+    body.print-offer .only-plan, body.print-plan .only-offer { display: none !important; }
+    .pr-table tr, .pr-avoid, .pr-box { break-inside: avoid; page-break-inside: avoid; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-storage-compat.js"></script>
+</head>
+<body class="text-slate-800 print-offer">
+
+<!-- Laden -->
+<div id="loading" class="fixed inset-0 bg-slate-50 z-[300] flex flex-col items-center justify-center gap-3">
+  <div class="w-10 h-10 border-4 border-sky-200 border-t-sky-600 rounded-full animate-spin"></div>
+  <div id="loading-text" class="text-sm font-semibold text-slate-500">Prüfe Anmeldung …</div>
+</div>
+
+<!-- Login -->
+<div id="login-screen" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4 bg-gradient-to-br from-slate-900 via-slate-800 to-sky-900">
+  <div class="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-7">
+    <div class="text-center mb-6">
+      <div class="text-4xl mb-2">🌍</div>
+      <h1 class="text-2xl font-extrabold text-slate-900">Travel Office</h1>
+      <p class="text-sm text-slate-500 mt-1">Melde dich an, um deine Reisen zu sehen.</p>
+    </div>
+    <form onsubmit="loginUser(event)" class="space-y-4">
+      <div><label class="lbl" for="login-email">E-Mail</label><input type="email" id="login-email" autocomplete="username" class="field"></div>
+      <div><label class="lbl" for="login-password">Passwort</label><input type="password" id="login-password" autocomplete="current-password" class="field"></div>
+      <button type="submit" class="w-full btn-primary py-3">Einloggen</button>
+      <div id="login-error" class="hidden text-sm text-rose-600 font-semibold text-center"></div>
+    </form>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app" class="hidden">
+  <header class="sticky top-0 z-40 bg-slate-900 text-white shadow-lg" style="padding-top: env(safe-area-inset-top)">
+    <div class="max-w-5xl mx-auto px-4 pt-3 pb-2 flex items-center gap-3">
+      <div class="text-2xl">🌍</div>
+      <div class="flex-1 min-w-0">
+        <select id="tripSelector" class="w-full bg-transparent text-white font-bold text-base md:text-lg truncate focus:outline-none cursor-pointer" onchange="switchTrip(this.value)"></select>
+        <div id="sync-status" class="text-[11px] text-slate-400 flex items-center gap-1.5"></div>
+      </div>
+      <div class="relative">
+        <button onclick="toggleMenu(event)" class="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 text-xl leading-none" aria-label="Menü">⋯</button>
+        <div id="menu" class="hidden absolute right-0 mt-2 w-60 bg-white text-slate-800 rounded-xl shadow-2xl py-1.5 z-50 text-sm font-medium">
+          <button onclick="createNewTrip()" class="w-full text-left px-4 py-2.5 hover:bg-slate-50">＋ Neue Reise</button>
+          <button onclick="duplicateTrip()" class="w-full text-left px-4 py-2.5 hover:bg-slate-50">⧉ Reise duplizieren</button>
+          <button onclick="openPdf()" class="w-full text-left px-4 py-2.5 hover:bg-slate-50">📄 PDF erstellen</button>
+          <div class="my-1 border-t border-slate-100"></div>
+          <button onclick="deleteTrip()" class="w-full text-left px-4 py-2.5 hover:bg-rose-50 text-rose-600">🗑 Reise löschen</button>
+          <button onclick="logoutUser()" class="w-full text-left px-4 py-2.5 hover:bg-slate-50">🚪 Abmelden</button>
+        </div>
+      </div>
+    </div>
+    <div class="max-w-5xl mx-auto px-4 pb-3">
+      <div class="grid grid-cols-2 bg-white/10 rounded-xl p-1 text-sm font-semibold">
+        <button id="tab-plan" onclick="setView('plan')" class="py-2 rounded-lg transition">✏️ Planen</button>
+        <button id="tab-travel" onclick="setView('travel')" class="py-2 rounded-lg transition">🧭 Unterwegs</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 pt-5 pb-40">
+    <div id="view-plan"></div>
+    <div id="view-travel" class="hidden"></div>
+  </main>
+
+  <div id="bottom-bar" class="fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200" style="padding-bottom: env(safe-area-inset-bottom)">
+    <div id="bottom-inner" class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3"></div>
+  </div>
+</div>
+
+<!-- PDF-Auswahl -->
+<div id="pdf-modal" class="hidden fixed inset-0 z-[150] bg-slate-900/50 flex items-end md:items-center justify-center" onclick="if(event.target===this)closePdf()">
+  <div class="bg-white w-full md:max-w-md rounded-t-2xl md:rounded-2xl p-5" style="padding-bottom: calc(1.25rem + env(safe-area-inset-bottom))">
+    <h3 class="text-lg font-extrabold text-slate-900 mb-3">PDF erstellen</h3>
+    <button onclick="printDoc('offer')" class="w-full text-left p-4 rounded-xl border border-slate-200 hover:border-sky-400 hover:bg-sky-50 mb-2">
+      <div class="font-bold">📑 Offerte</div>
+      <div class="text-sm text-slate-500">Mit Kundenadresse, Begrüssung und Preisübersicht – für die Kundschaft.</div>
+    </button>
+    <button onclick="printDoc('plan')" class="w-full text-left p-4 rounded-xl border border-slate-200 hover:border-sky-400 hover:bg-sky-50">
+      <div class="font-bold">🧭 Reiseplan</div>
+      <div class="text-sm text-slate-500">Ohne Preise, dafür mit Adressen, Buchungsnummern und wichtigen Infos – ideal für unterwegs.</div>
+    </button>
+    <p class="text-xs text-slate-400 mt-3">Im Druckdialog «Als PDF sichern» wählen.</p>
+    <button onclick="closePdf()" class="w-full btn-ghost mt-3">Abbrechen</button>
+  </div>
+</div>
+
+<div id="toast" class="fixed left-1/2 -translate-x-1/2 bottom-28 z-[400] bg-slate-900 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-xl opacity-0 translate-y-4 pointer-events-none transition duration-300"></div>
+
+<div id="print-root"></div>
+
+<script>
+/* ================= Konfiguration ================= */
+const BRAND = "Mori & Schädeli Travel";
+const CACHE_KEY = 'travelOffice.cache.v1';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB7JprSWxzoE9vOTykl7jjOACAXGllMlAc",
+  authDomain: "meintraveloffice.firebaseapp.com",
+  databaseURL: "https://meintraveloffice-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "meintraveloffice",
+  storageBucket: "meintraveloffice.firebasestorage.app",
+  messagingSenderId: "316403734488",
+  appId: "1:316403734488:web:55b60513c2b94c47a304ad"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.database();
+const storage = firebase.storage();
+
+/* ================= Status ================= */
+let tripsData = {}, currentTripId = null, view = 'plan';
+let openDays = new Set(), openSec = new Set(['tnotes']);
+let dbListenerActive = false, firstRender = true, creatingDefault = false;
+let online = true, offlineTimer = null, lastSync = null, dragIndex = null;
+
+/* ================= Helfer ================= */
+const WD  = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+const WDL = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+const MON = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const arr = x => Array.isArray(x) ? x : (x && typeof x === 'object' ? Object.values(x) : []);
+const num = v => parseFloat(v) || 0;
+const pad = n => String(n).padStart(2, '0');
+const chf = n => Math.round(n).toLocaleString('de-CH');
+const clean = o => JSON.parse(JSON.stringify(o));
+const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const lsDel = k => { try { localStorage.removeItem(k); } catch (e) {} };
+
+function parseDate(s) { if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null; const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); }
+function midnight(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function dayDate(t, i) { const b = parseDate(t.startDate); return b ? new Date(b.getFullYear(), b.getMonth(), b.getDate() + i) : null; }
+function fmtDate(d) { return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`; }
+function fmtDay(d) { return `${WDL[d.getDay()]}, ${d.getDate()}. ${MON[d.getMonth()]}`; }
+function daysBetween(a, b) { return Math.round((midnight(b) - midnight(a)) / 864e5); }
+function todayIndex(t) { if (!t) return -1; const s = parseDate(t.startDate), n = arr(t.days).length; if (!s || !n) return -1; const i = daysBetween(s, new Date()); return (i >= 0 && i < n) ? i : -1; }
+function trip() { return tripsData[currentTripId]; }
+function days() { const t = trip(); return t ? t.days : []; }
+function tripPath(p = '') { return 'trips/' + currentTripId + (p ? '/' + p : ''); }
+function linkify(s) { return esc(s).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener" class="text-sky-700 underline break-all">$1</a>'); }
+function autosize(el) { el.style.height = 'auto'; el.style.height = (el.scrollHeight + 2) + 'px'; }
+function toast(msg) { const el = $('toast'); el.textContent = msg; el.classList.remove('opacity-0', 'translate-y-4'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.add('opacity-0', 'translate-y-4'), 2600); }
+function write(p) { return p.catch(e => toast('Speichern fehlgeschlagen: ' + e.message)); }
+function shiftSet(set, from, delta) { return new Set([...set].map(x => x >= from ? x + delta : x).filter(x => x >= 0)); }
+
+function normalize(data) {
+  const out = {};
+  for (const [id, t] of Object.entries(data || {})) {
+    if (!t || typeof t !== 'object') continue;
+    out[id] = { ...t, days: arr(t.days).filter(Boolean).map(d => ({ ...d, flights: arr(d.flights).filter(Boolean), cars: arr(d.cars).filter(Boolean), docs: arr(d.docs).filter(Boolean) })) };
+  }
+  return out;
+}
+
+function totals(t) {
+  const n = Math.max(1, parseInt(t.travelers) || 1);
+  let flightsPP = 0, cars = 0, dayCosts = 0;
+  arr(t.days).forEach(d => {
+    dayCosts += num(d.cost);
+    arr(d.flights).forEach(f => flightsPP += num(f.cost));
+    arr(d.cars).forEach(c => cars += num(c.cost));
+  });
+  const pp = flightsPP + (cars + dayCosts) / n;
+  return { n, flightsPP, cars, dayCosts, pp, total: pp * n };
+}
+
+/* ================= Login & Sync ================= */
+auth.onAuthStateChanged(user => {
+  if (user) {
+    $('login-screen').classList.add('hidden');
+    $('app').classList.remove('hidden');
+    $('loading-text').textContent = 'Lade deine Reisen …';
+    startDatabaseSync();
+  } else {
+    $('login-screen').classList.remove('hidden');
+    $('app').classList.add('hidden');
+    $('loading').classList.add('hidden');
+    stopSync();
+  }
+});
+
+function loginUser(e) {
+  e.preventDefault();
+  const email = $('login-email').value.trim(), pass = $('login-password').value, err = $('login-error');
+  err.classList.add('hidden');
+  if (!email || !pass) { err.textContent = 'Bitte E-Mail und Passwort eingeben.'; err.classList.remove('hidden'); return; }
+  auth.signInWithEmailAndPassword(email, pass).catch(() => { err.textContent = 'Login fehlgeschlagen. Bitte Angaben prüfen.'; err.classList.remove('hidden'); });
+}
+function logoutUser() { closeMenu(); if (!confirm('Möchtest du dich wirklich abmelden?')) return; lsDel(CACHE_KEY); auth.signOut(); }
+function stopSync() {
+  if (dbListenerActive) { db.ref('trips').off(); db.ref('.info/connected').off(); dbListenerActive = false; }
+  tripsData = {}; currentTripId = null; firstRender = true;
+}
+function hideLoading() { $('loading').classList.add('hidden'); }
+
+function startDatabaseSync() {
+  if (dbListenerActive) return;
+  dbListenerActive = true;
+  // Letzter Stand aus dem Gerät – sofort sichtbar, auch ohne Internet
+  try {
+    const c = JSON.parse(lsGet(CACHE_KEY) || 'null');
+    if (c && c.data) { lastSync = c.ts; applyData(c.data); hideLoading(); }
+  } catch (e) {}
+  db.ref('.info/connected').on('value', s => setOnline(!!s.val()));
+  db.ref('trips').on('value', snap => {
+    hideLoading();
+    const data = snap.val();
+    if (!data) { createDefaultTrip(); return; }
+    lastSync = Date.now();
+    lsSet(CACHE_KEY, JSON.stringify({ data, ts: lastSync }));
+    applyData(data);
+  }, err => { hideLoading(); toast('Datenbank-Fehler: ' + err.message); });
+}
+
+function setOnline(v) {
+  clearTimeout(offlineTimer);
+  if (v) { online = true; renderStatus(); }
+  else offlineTimer = setTimeout(() => { online = false; renderStatus(); }, 2000);
+}
+
+function applyData(data) {
+  tripsData = normalize(data);
+  const ids = Object.keys(tripsData);
+  if (!ids.length) return;
+  if (!currentTripId || !tripsData[currentTripId]) {
+    const last = lsGet('travelOffice.lastTrip');
+    currentTripId = (last && tripsData[last]) ? last : ids[0];
+  }
+  if (firstRender) {
+    firstRender = false;
+    const stored = lsGet('travelOffice.view');
+    view = todayIndex(trip()) >= 0 ? 'travel' : (stored === 'travel' ? 'travel' : 'plan');
+    renderAll();
+    if (view === 'travel') scrollToToday();
+    return;
+  }
+  renderAll();
+}
+
+function createDefaultTrip() {
+  if (creatingDefault) return; creatingDefault = true;
+  const ref = db.ref('trips').push(); currentTripId = ref.key;
+  write(ref.set(newTripObj('Neue Reise'))).finally(() => creatingDefault = false);
+}
+
+/* ================= Reisen ================= */
+function newTripObj(name) { return { name, travelers: 2, days: [{ title: 'Anreise', cost: 0 }] }; }
+
+function createNewTrip() {
+  closeMenu();
+  const name = prompt('Wie soll die neue Reise heissen? (z.B. Tansania 2027)');
+  if (!name || !name.trim()) return;
+  const ref = db.ref('trips').push();
+  currentTripId = ref.key; lsSet('travelOffice.lastTrip', ref.key);
+  openDays = new Set([0]); view = 'plan'; lsSet('travelOffice.view', 'plan');
+  write(ref.set(newTripObj(name.trim())));
+  window.scrollTo(0, 0);
+}
+function duplicateTrip() {
+  closeMenu(); const t = trip(); if (!t) return;
+  const copy = clean(t); copy.name = (t.name || 'Reise') + ' (Kopie)';
+  const ref = db.ref('trips').push();
+  currentTripId = ref.key; lsSet('travelOffice.lastTrip', ref.key);
+  write(ref.set(copy)); toast('Reise dupliziert');
+}
+function deleteTrip() {
+  closeMenu(); const t = trip(); if (!t) return;
+  if (!confirm(`Reise «${t.name || 'Unbenannt'}» endgültig löschen?\nDas kann nicht rückgängig gemacht werden.`)) return;
+  const id = currentTripId; currentTripId = null; lsDel('travelOffice.lastTrip');
+  write(db.ref('trips/' + id).remove()); toast('Reise gelöscht');
+}
+function switchTrip(id) {
+  currentTripId = id; lsSet('travelOffice.lastTrip', id); openDays = new Set();
+  renderAll(); window.scrollTo(0, 0);
+  if (view === 'travel') scrollToToday();
+}
+function setView(v) {
+  view = v; lsSet('travelOffice.view', v); renderAll(); window.scrollTo(0, 0);
+  if (v === 'travel') scrollToToday();
+}
+function scrollToToday() { const i = todayIndex(trip()); if (i >= 0) setTimeout(() => jumpTo(i), 80); }
+function jumpTo(i) { const el = $('tday-' + i); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+function goToday() { const i = todayIndex(trip()); if (i >= 0) jumpTo(i); else window.scrollTo({ top: 0, behavior: 'smooth' }); }
+
+/* ================= Bearbeiten ================= */
+function setTrip(f, v) {
+  const t = trip(); if (!t) return;
+  if (f === 'travelers') v = Math.max(1, parseInt(v) || 1);
+  if (f === 'name') v = (v || '').trim() || 'Unbenannte Reise';
+  t[f] = v; write(db.ref(tripPath()).update({ [f]: v }));
+}
+function setDay(i, f, v) {
+  if (f === 'cost') v = num(v);
+  days()[i][f] = v; write(db.ref(tripPath(`days/${i}`)).update({ [f]: v }));
+}
+function setItem(i, a, j, f, v) {
+  if (f === 'cost') v = num(v);
+  days()[i][a][j][f] = v; write(db.ref(tripPath(`days/${i}/${a}/${j}`)).update({ [f]: v }));
+}
+function addItem(i, a, obj) {
+  const d = days()[i]; d[a].push(obj); openDays.add(i);
+  write(db.ref(tripPath(`days/${i}/${a}`)).set(clean(d[a])));
+}
+function delItem(i, a, j, label) {
+  if (!confirm(`${label} entfernen?`)) return;
+  const d = days()[i]; d[a].splice(j, 1);
+  write(db.ref(tripPath(`days/${i}/${a}`)).set(clean(d[a])));
+}
+function saveDays() { write(db.ref(tripPath('days')).set(clean(days()))); }
+function addDay() {
+  const ds = days(); ds.push({ title: 'Neuer Tag', cost: 0 }); openDays.add(ds.length - 1); saveDays();
+  setTimeout(() => { const el = $('pday-' + (ds.length - 1)); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 120);
+}
+function insertDayAfter(i) {
+  days().splice(i + 1, 0, { title: 'Neuer Tag', cost: 0 });
+  openDays = shiftSet(openDays, i + 1, 1); openDays.add(i + 1); saveDays();
+}
+function deleteDay(i) {
+  if (!confirm(`Tag ${i + 1} wirklich löschen?`)) return;
+  days().splice(i, 1); openDays.delete(i); openDays = shiftSet(openDays, i + 1, -1); saveDays();
+}
+function moveDay(i, dir) {
+  const ds = days(), j = i + dir; if (j < 0 || j >= ds.length) return;
+  [ds[i], ds[j]] = [ds[j], ds[i]];
+  const oi = openDays.has(i), oj = openDays.has(j);
+  openDays.delete(i); openDays.delete(j); if (oi) openDays.add(j); if (oj) openDays.add(i);
+  saveDays();
+}
+function toggleDay(i) { openDays.has(i) ? openDays.delete(i) : openDays.add(i); renderAll(); }
+function toggleAll() { const n = days().length; openDays = openDays.size === n ? new Set() : new Set([...Array(n).keys()]); renderAll(); }
+function secToggle(k, o) { o ? openSec.add(k) : openSec.delete(k); }
+
+/* Drag & Drop (Desktop) */
+function armDrag(el) { el.closest('article').setAttribute('draggable', 'true'); }
+function dStart(e, i) { dragIndex = i; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(i)); } catch (x) {} e.currentTarget.classList.add('opacity-50'); }
+function dOver(e) { if (dragIndex === null) return; e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+function dLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+function dDrop(e, i) {
+  e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+  if (dragIndex === null || dragIndex === i) return;
+  const ds = days(); const [m] = ds.splice(dragIndex, 1); ds.splice(i, 0, m);
+  dragIndex = null; openDays = new Set(); saveDays();
+}
+function dEnd(e) { e.currentTarget.classList.remove('opacity-50'); e.currentTarget.removeAttribute('draggable'); dragIndex = null; document.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over')); }
+document.addEventListener('mouseup', () => { if (dragIndex === null) document.querySelectorAll('article[draggable]').forEach(a => a.removeAttribute('draggable')); });
+
+/* Upload */
+function pickFile(i) { if (!online) { toast('Upload nur mit Internetverbindung möglich'); return; } $('file-' + i).click(); }
+function uploadFile(e, i) {
+  const file = e.target.files[0]; if (!file) return;
+  const btn = $('upbtn-' + i); btn.textContent = '⏳ Lädt …'; btn.disabled = true;
+  const ref = storage.ref(`trips/${currentTripId}/tag_${i}/${Date.now()}_${file.name}`);
+  ref.put(file).then(s => s.ref.getDownloadURL())
+    .then(url => { addItem(i, 'docs', { name: file.name, url }); toast('Dokument hochgeladen'); })
+    .catch(err => { toast('Upload fehlgeschlagen: ' + err.message); renderAll(); });
+}
+
+/* Menü & PDF */
+function toggleMenu(e) { e.stopPropagation(); $('menu').classList.toggle('hidden'); }
+function closeMenu() { $('menu').classList.add('hidden'); }
+document.addEventListener('click', e => { if (!e.target.closest('#menu')) closeMenu(); });
+function openPdf() { closeMenu(); $('pdf-modal').classList.remove('hidden'); }
+function closePdf() { $('pdf-modal').classList.add('hidden'); }
+function printDoc(type) {
+  closePdf();
+  document.body.classList.remove('print-offer', 'print-plan');
+  document.body.classList.add('print-' + type);
+  renderPrint();
+  const t = trip();
+  document.title = `${type === 'offer' ? 'Offerte' : 'Reiseplan'} ${t ? t.name || '' : ''}`.trim();
+  setTimeout(() => window.print(), 150);
+}
+window.addEventListener('afterprint', () => { document.title = 'Travel Office'; });
+
+/* ================= Rendering ================= */
+function renderAll() {
+  const t = trip(); if (!t) return;
+  const a = document.activeElement; let keep = null;
+  if (a && a.id && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.id !== 'tripSelector' && a.type !== 'file') {
+    keep = { id: a.id, v: a.value };
+    try { keep.s = a.selectionStart; keep.e = a.selectionEnd; } catch (e) {}
+  }
+  renderSelector(); renderStatus(); renderTabs();
+  $('view-plan').classList.toggle('hidden', view !== 'plan');
+  $('view-travel').classList.toggle('hidden', view !== 'travel');
+  if (view === 'plan') renderPlan(); else renderTravel();
+  renderBottom(); renderPrint();
+  document.querySelectorAll('#view-plan textarea').forEach(autosize);
+  if (keep) {
+    const el = $(keep.id);
+    if (el) { el.value = keep.v; el.focus({ preventScroll: true }); try { if (keep.s != null) el.setSelectionRange(keep.s, keep.e); } catch (e) {} }
+  }
+}
+
+function renderSelector() {
+  const s = $('tripSelector'); s.innerHTML = '';
+  Object.entries(tripsData)
+    .sort((a, b) => (a[1].startDate || '9999').localeCompare(b[1].startDate || '9999'))
+    .forEach(([id, t]) => { const o = document.createElement('option'); o.value = id; o.textContent = t.name || 'Unbenannte Reise'; o.style.color = '#0f172a'; s.appendChild(o); });
+  s.value = currentTripId;
+}
+function renderStatus() {
+  const el = $('sync-status'); if (!el) return;
+  if (online) el.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400"></span>Synchronisiert';
+  else {
+    const ts = lastSync ? new Date(lastSync) : null;
+    el.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400"></span>Offline${ts ? ` · Stand ${pad(ts.getDate())}.${pad(ts.getMonth() + 1)}. ${pad(ts.getHours())}:${pad(ts.getMinutes())}` : ''}`;
+  }
+}
+function renderTabs() {
+  const on = 'bg-white text-slate-900 shadow', off = 'text-slate-300 hover:text-white';
+  $('tab-plan').className = 'py-2 rounded-lg transition ' + (view === 'plan' ? on : off);
+  $('tab-travel').className = 'py-2 rounded-lg transition ' + (view === 'travel' ? on : off);
+}
+function renderBottom() {
+  const t = trip(), T = totals(t), el = $('bottom-inner');
+  if (view === 'plan') {
+    el.innerHTML = `<div>
+        <div class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Total pro Person</div>
+        <div class="text-2xl font-extrabold text-emerald-600 tabular-nums leading-tight">CHF ${chf(T.pp)}</div>
+        <div class="text-[11px] text-slate-500">${T.n} Reisende · Gesamt CHF ${chf(T.total)}</div>
+      </div>
+      <button onclick="openPdf()" class="btn-primary">📄 PDF</button>`;
+  } else {
+    const ti = todayIndex(t);
+    el.innerHTML = `<button onclick="goToday()" class="btn-ghost">${ti >= 0 ? '📍 Heute' : '⬆️ Übersicht'}</button>
+      <button onclick="printDoc('plan')" class="btn-primary">📄 Reiseplan-PDF</button>`;
+  }
+}
+
+/* ---------- Planen ---------- */
+const ta = (id, val, onch, ph = '', rows = 2) =>
+  `<textarea id="${id}" rows="${rows}" class="field" placeholder="${esc(ph)}" oninput="autosize(this)" onchange="${onch}">${esc(val)}</textarea>`;
+const stat = (label, val, color) =>
+  `<div class="card p-3"><div class="text-[11px] font-bold uppercase tracking-wide text-slate-500">${label}</div><div class="text-lg font-extrabold text-${color}-600 tabular-nums">${val}</div></div>`;
+
+function renderPlan() {
+  const t = trip(), ds = days(), T = totals(t);
+  const start = parseDate(t.startDate), end = start && ds.length ? dayDate(t, ds.length - 1) : null;
+  const allOpen = ds.length && openDays.size === ds.length;
+  $('view-plan').innerHTML = `
+  <section class="card p-4 md:p-5">
+    <label class="lbl" for="t-name">Reise</label>
+    <input id="t-name" class="field text-lg font-bold" value="${esc(t.name)}" placeholder="z.B. Tansania & Sansibar" onchange="setTrip('name',this.value)">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+      <div><label class="lbl">Startdatum</label><input id="t-start" type="date" class="field" value="${esc(t.startDate || '')}" onchange="setTrip('startDate',this.value)"></div>
+      <div><label class="lbl">Rückkehr</label><div class="field bg-slate-50 text-slate-500">${end ? fmtDate(end) : '–'}</div></div>
+      <div><label class="lbl">Reisende</label><input id="t-trav" type="number" min="1" inputmode="numeric" class="field" value="${esc(t.travelers || 2)}" onchange="setTrip('travelers',this.value)"></div>
+      <div><label class="lbl">Reiseberater/in</label><input id="t-cons" class="field" value="${esc(t.consultantName || '')}" placeholder="Name" onchange="setTrip('consultantName',this.value)"></div>
+    </div>
+  </section>
+
+  <section class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+    ${stat('Total p.P.', 'CHF ' + chf(T.pp), 'emerald')}
+    ${stat('Flüge p.P.', 'CHF ' + chf(T.flightsPP), 'sky')}
+    ${stat('Mietwagen total', 'CHF ' + chf(T.cars), 'violet')}
+    ${stat('Tageskosten total', 'CHF ' + chf(T.dayCosts), 'amber')}
+  </section>
+
+  <details id="sec-client" class="card mt-4" ${openSec.has('client') ? 'open' : ''} ontoggle="secToggle('client',this.open)">
+    <summary class="p-4 flex items-center justify-between font-semibold"><span>👤 Kunde & Offerte</span><span class="flex items-center gap-2 text-xs text-slate-400 font-medium">für PDF-Offerte <span class="chev">▾</span></span></summary>
+    <div class="px-4 pb-4 grid md:grid-cols-2 gap-3">
+      <div><label class="lbl">Kundenadresse</label>${ta('t-addr', t.clientAddress, "setTrip('clientAddress',this.value)", 'Vorname Name\nStrasse Nr.\nPLZ Ort', 3)}</div>
+      <div><label class="lbl">Begrüssungstext</label>${ta('t-intro', t.introText, "setTrip('introText',this.value)", 'Liebe … ,\nherzlichen Dank für eure Anfrage …', 3)}</div>
+    </div>
+  </details>
+
+  <details id="sec-notes" class="card mt-3" ${openSec.has('notes') ? 'open' : ''} ontoggle="secToggle('notes',this.open)">
+    <summary class="p-4 flex items-center justify-between font-semibold"><span>🛟 Wichtige Infos für unterwegs</span><span class="chev">▾</span></summary>
+    <div class="px-4 pb-4">
+      ${ta('t-notes', t.notes, "setTrip('notes',this.value)", 'Notfallnummern, Reiseversicherung, Botschaft, Visum/Einreise, Kontakt Reisebüro …', 4)}
+      <p class="text-xs text-slate-400 mt-1.5">Erscheint in der Ansicht «Unterwegs» und im Reiseplan-PDF.</p>
+    </div>
+  </details>
+
+  <div class="flex items-center justify-between mt-7 mb-2">
+    <h2 class="text-sm font-bold uppercase tracking-wide text-slate-500">Reiseverlauf · ${ds.length} ${ds.length === 1 ? 'Tag' : 'Tage'}</h2>
+    ${ds.length ? `<button onclick="toggleAll()" class="text-xs font-semibold text-sky-700">${allOpen ? 'Alle zuklappen' : 'Alle aufklappen'}</button>` : ''}
+  </div>
+  <div class="space-y-3">${ds.map((d, i) => planDay(t, d, i, T.n)).join('')}</div>
+  <button onclick="addDay()" class="mt-3 w-full py-4 rounded-2xl border-2 border-dashed border-slate-300 text-slate-500 font-semibold hover:border-sky-400 hover:text-sky-600 hover:bg-white transition">＋ Tag hinzufügen</button>`;
+}
+
+function dateBadge(dd, i) {
+  return dd
+    ? `<div class="w-12 shrink-0 text-center rounded-xl bg-sky-50 text-sky-700 py-1"><div class="text-[10px] font-bold uppercase">${WD[dd.getDay()]}</div><div class="text-lg font-extrabold leading-none">${dd.getDate()}</div><div class="text-[10px] font-semibold">${MON[dd.getMonth()]}</div></div>`
+    : `<div class="w-12 shrink-0 text-center rounded-xl bg-slate-100 text-slate-600 py-2"><div class="text-[10px] font-bold uppercase">Tag</div><div class="text-lg font-extrabold leading-none">${i + 1}</div></div>`;
+}
+
+function planDay(t, d, i, n) {
+  const dd = dayDate(t, i), open = openDays.has(i);
+  const pp = d.flights.reduce((s, f) => s + num(f.cost), 0) + (num(d.cost) + d.cars.reduce((s, c) => s + num(c.cost), 0)) / n;
+  const meta = [];
+  if (d.flights.length) meta.push(`✈️ ${d.flights.length}`);
+  if (d.cars.length) meta.push('🚗');
+  if (d.hotel) meta.push('🏨 ' + esc(d.hotel));
+  if (d.docs.length) meta.push(`📎 ${d.docs.length}`);
+  return `<article id="pday-${i}" class="card overflow-hidden" ondragstart="dStart(event,${i})" ondragover="dOver(event)" ondragleave="dLeave(event)" ondrop="dDrop(event,${i})" ondragend="dEnd(event)">
+    <div class="flex items-center gap-3 p-3 cursor-pointer select-none hover:bg-slate-50/70" onclick="toggleDay(${i})">
+      <div class="hidden md:flex items-center text-slate-300 hover:text-slate-500 px-1 cursor-grab text-lg" onmousedown="armDrag(this)" onclick="event.stopPropagation()" title="Ziehen zum Verschieben">⠿</div>
+      ${dateBadge(dd, i)}
+      <div class="flex-1 min-w-0">
+        <div class="text-[11px] font-semibold text-slate-400">Tag ${i + 1}${dd ? ' · ' + fmtDate(dd) : ''}</div>
+        <div class="font-semibold text-slate-900 truncate">${d.title ? esc(d.title) : '<span class="text-slate-400">Ohne Titel</span>'}</div>
+        ${meta.length ? `<div class="text-xs text-slate-500 truncate">${meta.join(' · ')}</div>` : ''}
+      </div>
+      <div class="text-right shrink-0"><div class="text-sm font-bold tabular-nums text-slate-700">${chf(pp)}</div><div class="text-[10px] text-slate-400">CHF p.P.</div></div>
+      <div class="text-slate-400 transition-transform ${open ? 'rotate-180' : ''}">▾</div>
+    </div>
+    ${open ? planDayBody(d, i) : ''}
+  </article>`;
+}
+
+function planDayBody(d, i) {
+  const last = days().length - 1;
+  return `<div class="border-t border-slate-100 p-4 space-y-4 bg-slate-50/60">
+    <div class="grid grid-cols-1 md:grid-cols-[1fr_190px] gap-3">
+      <div><label class="lbl">Titel / Ort</label><input id="d${i}-title" class="field font-semibold" value="${esc(d.title)}" placeholder="z.B. Ankunft in Arusha" onchange="setDay(${i},'title',this.value)"></div>
+      <div><label class="lbl">Tageskosten (ganze Gruppe)</label><input id="d${i}-cost" type="number" inputmode="decimal" class="field money" value="${esc(d.cost || 0)}" onchange="setDay(${i},'cost',this.value)"></div>
+    </div>
+    <div><label class="lbl">Programm / Details</label>${ta(`d${i}-prog`, d.program, `setDay(${i},'program',this.value)`, 'Was steht an? Ausflüge, Treffpunkte, Zeiten, Links …', 3)}</div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div><label class="lbl">🏨 Unterkunft</label><input id="d${i}-hotel" class="field" value="${esc(d.hotel)}" placeholder="Hotelname" onchange="setDay(${i},'hotel',this.value)"></div>
+      <div><label class="lbl">Adresse</label><input id="d${i}-haddr" class="field" value="${esc(d.hotelAddress)}" placeholder="für Karte & Reiseplan" onchange="setDay(${i},'hotelAddress',this.value)"></div>
+      <div><label class="lbl">Buchungsnr.</label><input id="d${i}-href" class="field" value="${esc(d.hotelRef)}" placeholder="optional" onchange="setDay(${i},'hotelRef',this.value)"></div>
+    </div>
+    ${d.flights.map((f, j) => flightEditor(f, i, j)).join('')}
+    ${d.cars.map((c, j) => carEditor(c, i, j)).join('')}
+    ${d.docs.length ? `<div><div class="lbl">Dokumente</div><div class="flex flex-wrap gap-2">${d.docs.map((x, j) => `
+      <span class="inline-flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg pl-2.5 pr-1 py-1 text-xs">
+        <a href="${esc(x.url)}" target="_blank" rel="noopener" class="font-semibold text-sky-700 max-w-[200px] truncate">📎 ${esc(x.name)}</a>
+        <button onclick="delItem(${i},'docs',${j},'Dokument')" class="w-6 h-6 rounded hover:bg-rose-50 text-rose-500">✕</button>
+      </span>`).join('')}</div></div>` : ''}
+    <div class="flex flex-wrap gap-2">
+      <button onclick="addItem(${i},'flights',{route:'',flightNo:'',time:'',bookingRef:'',cost:0})" class="chip bg-sky-100 text-sky-800">＋ ✈️ Flug</button>
+      <button onclick="addItem(${i},'cars',{action:'Abholung',provider:'',vehicle:'',bookingRef:'',cost:0})" class="chip bg-violet-100 text-violet-800">＋ 🚗 Mietwagen</button>
+      <input type="file" id="file-${i}" class="hidden" onchange="uploadFile(event,${i})">
+      <button id="upbtn-${i}" onclick="pickFile(${i})" class="chip bg-slate-200 text-slate-700">＋ 📎 Dokument</button>
+    </div>
+    <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-200">
+      <div class="flex items-center gap-1.5">
+        <button onclick="moveDay(${i},-1)" class="icon-btn" title="Nach oben" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button onclick="moveDay(${i},1)" class="icon-btn" title="Nach unten" ${i === last ? 'disabled' : ''}>↓</button>
+        <button onclick="insertDayAfter(${i})" class="chip bg-white border border-slate-200 text-slate-600">＋ Tag danach</button>
+      </div>
+      <button onclick="deleteDay(${i})" class="chip text-rose-600 hover:bg-rose-50">🗑 Tag löschen</button>
+    </div>
+  </div>`;
+}
+
+function flightEditor(f, i, j) {
+  const p = `f${i}-${j}`, u = k => `setItem(${i},'flights',${j},'${k}',this.value)`;
+  return `<div class="rounded-xl border border-sky-200 bg-sky-50 p-3">
+    <div class="flex items-center justify-between mb-2"><span class="text-xs font-bold uppercase tracking-wide text-sky-800">✈️ Flug</span><button onclick="delItem(${i},'flights',${j},'Flug')" class="icon-btn text-rose-500">✕</button></div>
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+      <div class="col-span-2 md:col-span-1"><label class="lbl">Strecke</label><input id="${p}-r" class="field" value="${esc(f.route)}" placeholder="ZRH – JRO" onchange="${u('route')}"></div>
+      <div><label class="lbl">Flugnr.</label><input id="${p}-n" class="field" value="${esc(f.flightNo)}" placeholder="LX 123" onchange="${u('flightNo')}"></div>
+      <div><label class="lbl">Zeiten</label><input id="${p}-t" class="field" value="${esc(f.time)}" placeholder="10:05 – 21:40" onchange="${u('time')}"></div>
+      <div><label class="lbl">Buchungsnr.</label><input id="${p}-b" class="field" value="${esc(f.bookingRef)}" placeholder="PNR" onchange="${u('bookingRef')}"></div>
+      <div><label class="lbl">Preis p.P.</label><input id="${p}-c" type="number" inputmode="decimal" class="field money" value="${esc(f.cost || 0)}" onchange="${u('cost')}"></div>
+    </div>
+  </div>`;
+}
+
+function carEditor(c, i, j) {
+  const p = `c${i}-${j}`, u = k => `setItem(${i},'cars',${j},'${k}',this.value)`;
+  return `<div class="rounded-xl border border-violet-200 bg-violet-50 p-3">
+    <div class="flex items-center justify-between mb-2"><span class="text-xs font-bold uppercase tracking-wide text-violet-800">🚗 Mietwagen</span><button onclick="delItem(${i},'cars',${j},'Mietwagen')" class="icon-btn text-rose-500">✕</button></div>
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+      <div><label class="lbl">Aktion</label><select id="${p}-a" class="field" onchange="${u('action')}">${['Abholung', 'Rückgabe'].map(o => `<option ${c.action === o ? 'selected' : ''}>${o}</option>`).join('')}</select></div>
+      <div><label class="lbl">Ort / Anbieter</label><input id="${p}-p" class="field" value="${esc(c.provider)}" placeholder="Hertz Flughafen" onchange="${u('provider')}"></div>
+      <div><label class="lbl">Fahrzeug</label><input id="${p}-v" class="field" value="${esc(c.vehicle)}" placeholder="Toyota RAV4" onchange="${u('vehicle')}"></div>
+      <div><label class="lbl">Buchungsnr.</label><input id="${p}-b" class="field" value="${esc(c.bookingRef)}" placeholder="optional" onchange="${u('bookingRef')}"></div>
+      <div class="col-span-2 md:col-span-1"><label class="lbl">Preis total</label><input id="${p}-c" type="number" inputmode="decimal" class="field money" value="${esc(c.cost || 0)}" onchange="${u('cost')}"></div>
+    </div>
+  </div>`;
+}
+
+/* ---------- Unterwegs ---------- */
+const mapsBtn = q => `<a href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent(q.trim())}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 mt-2 text-xs font-bold text-sky-700 bg-white border border-sky-200 rounded-lg px-2.5 py-1.5">📍 In Karte öffnen</a>`;
+const refLine = r => r ? `<div class="text-xs text-slate-500 mt-1">Buchung: <b class="font-mono text-slate-800 select-all">${esc(r)}</b></div>` : '';
+
+function renderTravel() {
+  const t = trip(), ds = days(), n = ds.length, T = totals(t);
+  const start = parseDate(t.startDate), end = start && n ? dayDate(t, n - 1) : null, ti = todayIndex(t);
+  let status = 'Startdatum noch nicht gesetzt', progress = 0;
+  if (start) {
+    const diff = daysBetween(new Date(), start);
+    if (diff > 0) status = diff === 1 ? 'Morgen geht es los! 🎉' : `Noch ${diff} Tage bis zur Abreise`;
+    else if (ti >= 0) { status = `Tag ${ti + 1} von ${n}`; progress = Math.round((ti + 1) / n * 100); }
+    else { status = 'Reise abgeschlossen ✓'; progress = 100; }
+  }
+  const allDocs = []; ds.forEach((d, i) => d.docs.forEach(x => allDocs.push({ ...x, i })));
+
+  let h = `<section class="rounded-2xl p-5 text-white bg-gradient-to-br from-sky-600 to-indigo-700 shadow-lg">
+      <div class="text-xs font-semibold uppercase tracking-wider text-sky-100">${start ? (end && n > 1 ? `${fmtDate(start)} – ${fmtDate(end)}` : fmtDate(start)) : 'Datum offen'} · ${n} ${n === 1 ? 'Tag' : 'Tage'} · ${T.n} Pers.</div>
+      <h1 class="text-2xl md:text-3xl font-extrabold mt-1">${esc(t.name || 'Reise')}</h1>
+      <div class="mt-3 text-sm font-semibold">${status}</div>
+      ${progress ? `<div class="mt-2 h-2 rounded-full bg-white/25 overflow-hidden"><div class="h-full bg-white rounded-full" style="width:${progress}%"></div></div>` : ''}
+    </section>`;
+
+  if (n) h += `<div class="flex gap-2 overflow-x-auto hide-scroll -mx-4 px-4 py-4">${ds.map((d, i) => {
+      const dd = dayDate(t, i), act = i === ti;
+      return `<button onclick="jumpTo(${i})" class="shrink-0 w-14 py-2 rounded-xl text-center border ${act ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 text-slate-700'}">
+        <div class="text-[10px] font-bold uppercase ${act ? 'text-sky-300' : 'text-slate-400'}">${dd ? WD[dd.getDay()] : 'Tag'}</div>
+        <div class="text-base font-extrabold leading-tight">${dd ? dd.getDate() : i + 1}</div></button>`;
+    }).join('')}</div>`;
+  else h += '<div class="h-4"></div>';
+
+  if (t.notes) h += `<details id="sec-tnotes" class="card mb-3" ${openSec.has('tnotes') ? 'open' : ''} ontoggle="secToggle('tnotes',this.open)">
+      <summary class="p-4 font-semibold flex items-center justify-between">🛟 Wichtige Infos <span class="chev">▾</span></summary>
+      <div class="px-4 pb-4 text-sm text-slate-700 whitespace-pre-line leading-relaxed">${linkify(t.notes)}</div></details>`;
+
+  if (allDocs.length) h += `<details id="sec-tdocs" class="card mb-3" ${openSec.has('tdocs') ? 'open' : ''} ontoggle="secToggle('tdocs',this.open)">
+      <summary class="p-4 font-semibold flex items-center justify-between">📎 Alle Dokumente (${allDocs.length}) <span class="chev">▾</span></summary>
+      <div class="px-2 pb-3">${allDocs.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener" class="flex items-center justify-between gap-3 px-2 py-2.5 rounded-lg hover:bg-slate-50">
+        <span class="text-sm font-semibold text-sky-700 truncate">📄 ${esc(x.name)}</span><span class="text-xs text-slate-400 shrink-0">Tag ${x.i + 1}</span></a>`).join('')}</div></details>`;
+
+  h += n ? `<div class="space-y-3">${ds.map((d, i) => travelDay(t, d, i, ti)).join('')}</div>`
+         : `<div class="card p-8 text-center text-slate-500">Noch keine Tage geplant.<br><button onclick="setView('plan')" class="mt-3 btn-primary">Jetzt planen</button></div>`;
+  $('view-travel').innerHTML = h;
+}
+
+function travelDay(t, d, i, ti) {
+  const dd = dayDate(t, i), isToday = i === ti;
+  const past = dd && midnight(new Date()) > dd;
+  let h = `<article id="tday-${i}" class="day-anchor card p-4 ${isToday ? 'ring-2 ring-sky-500 shadow-md' : ''} ${past ? 'opacity-60' : ''}">
+    <div class="flex items-center justify-between gap-2">
+      <div class="text-xs font-bold uppercase tracking-wide ${isToday ? 'text-sky-600' : 'text-slate-400'}">Tag ${i + 1}${dd ? ' · ' + fmtDay(dd) : ''}</div>
+      ${isToday ? '<span class="text-[10px] font-bold uppercase bg-sky-600 text-white px-2 py-0.5 rounded-full">Heute</span>' : ''}
+    </div>
+    <h3 class="text-lg font-bold text-slate-900 mt-1">${esc(d.title) || '—'}</h3>
+    ${d.program ? `<div class="text-sm text-slate-700 mt-1 whitespace-pre-line leading-relaxed">${linkify(d.program)}</div>` : ''}`;
+  d.flights.forEach(f => {
+    if (!(f.route || f.flightNo || f.time)) return;
+    h += `<div class="mt-3 rounded-xl bg-sky-50 border border-sky-100 p-3">
+      <div class="flex items-start justify-between gap-2"><div class="font-bold text-slate-900">✈️ ${esc(f.route || 'Flug')}</div>${f.flightNo ? `<span class="text-xs font-mono font-bold bg-white border border-sky-200 rounded px-1.5 py-0.5 shrink-0">${esc(f.flightNo)}</span>` : ''}</div>
+      ${f.time ? `<div class="text-sm text-slate-700 mt-0.5">🕒 ${esc(f.time)}</div>` : ''}
+      ${refLine(f.bookingRef)}
+      ${f.flightNo ? `<a class="inline-flex mt-2 text-xs font-bold text-sky-700 bg-white border border-sky-200 rounded-lg px-2.5 py-1.5" target="_blank" rel="noopener" href="https://www.google.com/search?q=${encodeURIComponent('Flugstatus ' + f.flightNo)}">Flugstatus prüfen ↗</a>` : ''}
+    </div>`;
+  });
+  d.cars.forEach(c => {
+    if (!(c.provider || c.vehicle)) return;
+    h += `<div class="mt-3 rounded-xl bg-violet-50 border border-violet-100 p-3">
+      <div class="font-bold text-slate-900">🚗 Mietwagen – ${esc(c.action || '')}</div>
+      <div class="text-sm text-slate-700">${esc([c.vehicle, c.provider].filter(Boolean).join(' · '))}</div>
+      ${refLine(c.bookingRef)}${c.provider ? mapsBtn(c.provider) : ''}
+    </div>`;
+  });
+  if (d.hotel) h += `<div class="mt-3 rounded-xl bg-amber-50 border border-amber-100 p-3">
+      <div class="text-[11px] font-bold uppercase text-amber-700">Übernachtung</div>
+      <div class="font-bold text-slate-900">🏨 ${esc(d.hotel)}</div>
+      ${d.hotelAddress ? `<div class="text-sm text-slate-600">${esc(d.hotelAddress)}</div>` : ''}
+      ${refLine(d.hotelRef)}${mapsBtn(d.hotel + ' ' + (d.hotelAddress || ''))}
+    </div>`;
+  if (d.docs.length) h += `<div class="flex flex-wrap gap-2 mt-3">${d.docs.map(x => `<a href="${esc(x.url)}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 max-w-full truncate">📎 ${esc(x.name)}</a>`).join('')}</div>`;
+  return h + '</article>';
+}
+
+/* ---------- PDF ---------- */
+function renderPrint() {
+  const t = trip(); if (!t) return;
+  const ds = days(), T = totals(t);
+  const start = parseDate(t.startDate), end = start && ds.length ? dayDate(t, ds.length - 1) : null;
+  const range = start ? (end && ds.length > 1 ? `${fmtDate(start)} – ${fmtDate(end)}` : fmtDate(start)) : 'auf Anfrage';
+
+  const rows = ds.map((d, i) => {
+    const dd = dayDate(t, i);
+    const dl = dd ? `${WDL[dd.getDay()]}<br>${fmtDate(dd)}` : `Tag ${i + 1}`;
+    let s = '';
+    if (d.title) s += `<strong>${esc(d.title)}</strong><br>`;
+    if (d.program) s += `<div style="white-space:pre-line">${esc(d.program)}</div>`;
+    const sub = [];
+    d.flights.forEach(f => { if (f.route || f.flightNo || f.time) sub.push(`Flug: ${esc([f.route, f.time, f.flightNo].filter(Boolean).join(' | '))}${f.bookingRef ? `<span class="only-plan"> · Buchung ${esc(f.bookingRef)}</span>` : ''}`); });
+    d.cars.forEach(c => { if (c.provider || c.vehicle) sub.push(`Mietwagen (${esc(c.action || '')}): ${esc([c.vehicle, c.provider].filter(Boolean).join(' bei '))}${c.bookingRef ? `<span class="only-plan"> · Buchung ${esc(c.bookingRef)}</span>` : ''}`); });
+    if (d.hotel) sub.push(`Unterkunft: ${esc(d.hotel)}<span class="only-plan">${d.hotelAddress ? ', ' + esc(d.hotelAddress) : ''}${d.hotelRef ? ' · Buchung ' + esc(d.hotelRef) : ''}</span>`);
+    if (d.docs.length) sub.push(`<span class="only-plan">Dokumente: ${d.docs.map(x => `<a href="${esc(x.url)}">${esc(x.name)}</a>`).join(', ')}</span>`);
+    if (sub.length) s += `<div class="pr-sub" style="margin-top:3px">${sub.join('<br>')}</div>`;
+    return `<tr><td class="pr-date">${dl}</td><td>${s}</td></tr>`;
+  }).join('');
+
+  const priceRows = [`<tr><td>Flüge pro Person</td><td class="r">CHF ${chf(T.flightsPP)}.–</td></tr>`];
+  if (T.cars) priceRows.push(`<tr><td>Mietwagen (Total CHF ${chf(T.cars)} ÷ ${T.n})</td><td class="r">CHF ${chf(T.cars / T.n)}.–</td></tr>`);
+  if (T.dayCosts) priceRows.push(`<tr><td>Unterkünfte & Leistungen vor Ort (Total CHF ${chf(T.dayCosts)} ÷ ${T.n})</td><td class="r">CHF ${chf(T.dayCosts / T.n)}.–</td></tr>`);
+
+  $('print-root').innerHTML = `
+    <div class="pr-head"><div class="pr-brand">${esc(BRAND)}</div><div class="pr-doc"><span class="only-offer">Reisevorschlag</span><span class="only-plan">Reiseplan</span></div></div>
+    <div class="pr-title">${esc(t.name || 'Reise')}</div>
+    <table class="pr-meta">
+      <tr><td>Reisedatum</td><td>${range}${ds.length ? ` (${ds.length} ${ds.length === 1 ? 'Tag' : 'Tage'})` : ''}</td></tr>
+      <tr><td>Reisende</td><td>${T.n} ${T.n === 1 ? 'Person' : 'Personen'}</td></tr>
+      ${t.consultantName ? `<tr><td>Reiseberater/in</td><td>${esc(t.consultantName)}</td></tr>` : ''}
+    </table>
+    <div class="only-offer">${t.clientAddress ? `<div class="pr-address">${esc(t.clientAddress)}</div>` : ''}${t.introText ? `<div class="pr-intro">${esc(t.introText)}</div>` : ''}</div>
+    <div class="only-plan">${t.notes ? `<div class="pr-h2">Wichtige Infos</div><div class="pr-box">${esc(t.notes)}</div>` : ''}</div>
+    <div class="pr-h2"><span class="only-offer">Leistungen</span><span class="only-plan">Reiseverlauf</span></div>
+    <table class="pr-table">${rows}</table>
+    <div class="only-offer pr-avoid">
+      <div class="pr-h2">Preisübersicht</div>
+      <table class="pr-table">${priceRows.join('')}
+        <tr class="pr-total"><td>Total pro Person</td><td class="r">CHF ${chf(T.pp)}.–</td></tr>
+        <tr><td class="pr-sub" style="border:none">Gesamttotal für ${T.n} ${T.n === 1 ? 'Person' : 'Personen'}</td><td class="r pr-sub" style="border:none">CHF ${chf(T.total)}.–</td></tr>
+      </table>
+    </div>
+    <div class="pr-foot">${esc(BRAND)} · erstellt am ${fmtDate(new Date())}</div>`;
+}
+</script>
+</body>
+</html>
