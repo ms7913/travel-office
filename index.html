@@ -219,21 +219,32 @@ function normalize(data) {
   const out = {};
   for (const [id, t] of Object.entries(data || {})) {
     if (!t || typeof t !== 'object') continue;
-    out[id] = { ...t, days: arr(t.days).filter(Boolean).map(d => ({ ...d, flights: arr(d.flights).filter(Boolean), cars: arr(d.cars).filter(Boolean), docs: arr(d.docs).filter(Boolean) })) };
+    out[id] = { ...t, days: arr(t.days).filter(Boolean).map(d => ({ ...d,
+      flights: arr(d.flights).filter(Boolean), cars: arr(d.cars).filter(Boolean),
+      transfers: arr(d.transfers).filter(Boolean), activities: arr(d.activities).filter(Boolean),
+      docs: arr(d.docs).filter(Boolean) })) };
   }
   return out;
 }
 
+const sumCost = list => arr(list).reduce((s, x) => s + num(x && x.cost), 0);
+/* Kosten eines Tages: Flüge sind p.P., alles andere für die ganze Gruppe */
+function dayCosts(d) {
+  const c = {
+    flightsPP: sumCost(d.flights), hotel: num(d.hotelCost), transfers: sumCost(d.transfers),
+    activities: sumCost(d.activities), cars: sumCost(d.cars), other: num(d.cost)
+  };
+  c.group = c.hotel + c.transfers + c.activities + c.cars + c.other;
+  return c;
+}
+
 function totals(t) {
   const n = Math.max(1, parseInt(t.travelers) || 1);
-  let flightsPP = 0, cars = 0, dayCosts = 0;
-  arr(t.days).forEach(d => {
-    dayCosts += num(d.cost);
-    arr(d.flights).forEach(f => flightsPP += num(f.cost));
-    arr(d.cars).forEach(c => cars += num(c.cost));
-  });
-  const pp = flightsPP + (cars + dayCosts) / n;
-  return { n, flightsPP, cars, dayCosts, pp, total: pp * n };
+  const T = { n, flightsPP: 0, hotel: 0, transfers: 0, activities: 0, cars: 0, other: 0, group: 0 };
+  arr(t.days).forEach(d => { const c = dayCosts(d); for (const k in c) T[k] += c[k]; });
+  T.pp = T.flightsPP + T.group / n;
+  T.total = T.pp * n;
+  return T;
 }
 
 /* ================= Login & Sync ================= */
@@ -522,12 +533,18 @@ function renderPlan() {
     </div>
   </section>
 
-  <section class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-    ${stat('Total p.P.', 'CHF ' + chf(T.pp), 'emerald')}
-    ${stat('Flüge p.P.', 'CHF ' + chf(T.flightsPP), 'sky')}
-    ${stat('Mietwagen total', 'CHF ' + chf(T.cars), 'violet')}
-    ${stat('Tageskosten total', 'CHF ' + chf(T.dayCosts), 'amber')}
+  <section class="grid grid-cols-2 md:grid-cols-6 gap-3 mt-4">
+    <div class="col-span-2 md:col-span-2 card p-3 bg-emerald-50 border-emerald-200">
+      <div class="text-[11px] font-bold uppercase tracking-wide text-emerald-700">Total pro Person</div>
+      <div class="text-2xl font-extrabold text-emerald-600 tabular-nums">CHF ${chf(T.pp)}</div>
+      <div class="text-[11px] text-emerald-700">Gesamt ${T.n} Pers.: CHF ${chf(T.total)}</div>
+    </div>
+    ${stat('✈️ Flüge p.P.', chf(T.flightsPP), 'sky')}
+    ${stat('🏨 Hotels', chf(T.hotel), 'amber')}
+    ${stat('🚐 Transfers', chf(T.transfers), 'teal')}
+    ${stat('🎟 Aktivitäten', chf(T.activities), 'rose')}
   </section>
+  ${T.cars || T.other ? `<div class="text-xs text-slate-500 mt-2 px-1">Dazu Mietwagen CHF ${chf(T.cars)} · Übrige Kosten CHF ${chf(T.other)} (jeweils Gruppe)</div>` : ''}
 
   <details id="sec-client" class="card mt-4" ${openSec.has('client') ? 'open' : ''} ontoggle="secToggle('client',this.open)">
     <summary class="p-4 flex items-center justify-between font-semibold"><span>👤 Kunde & Offerte</span><span class="flex items-center gap-2 text-xs text-slate-400 font-medium">für PDF-Offerte <span class="chev">▾</span></span></summary>
@@ -561,9 +578,11 @@ function dateBadge(dd, i) {
 
 function planDay(t, d, i, n) {
   const dd = dayDate(t, i), open = openDays.has(i);
-  const pp = d.flights.reduce((s, f) => s + num(f.cost), 0) + (num(d.cost) + d.cars.reduce((s, c) => s + num(c.cost), 0)) / n;
+  const c = dayCosts(d), pp = c.flightsPP + c.group / n;
   const meta = [];
   if (d.flights.length) meta.push(`✈️ ${d.flights.length}`);
+  if (d.transfers.length) meta.push(`🚐 ${d.transfers.length}`);
+  if (d.activities.length) meta.push(`🎟 ${d.activities.length}`);
   if (d.cars.length) meta.push('🚗');
   if (d.hotel) meta.push('🏨 ' + esc(d.hotel));
   if (d.docs.length) meta.push(`📎 ${d.docs.length}`);
@@ -579,25 +598,37 @@ function planDay(t, d, i, n) {
       <div class="text-right shrink-0"><div class="text-sm font-bold tabular-nums text-slate-700">${chf(pp)}</div><div class="text-[10px] text-slate-400">CHF p.P.</div></div>
       <div class="text-slate-400 transition-transform ${open ? 'rotate-180' : ''}">▾</div>
     </div>
-    ${open ? planDayBody(d, i) : ''}
+    ${open ? planDayBody(d, i, n) : ''}
   </article>`;
 }
 
-function planDayBody(d, i) {
-  const last = days().length - 1;
+function planDayBody(d, i, n) {
+  const last = days().length - 1, c = dayCosts(d);
+  const parts = [];
+  if (c.flightsPP) parts.push(`Flüge ${chf(c.flightsPP)} p.P.`);
+  if (c.hotel) parts.push(`Hotel ${chf(c.hotel)}`);
+  if (c.transfers) parts.push(`Transfers ${chf(c.transfers)}`);
+  if (c.activities) parts.push(`Aktivitäten ${chf(c.activities)}`);
+  if (c.cars) parts.push(`Mietwagen ${chf(c.cars)}`);
+  if (c.other) parts.push(`Übriges ${chf(c.other)}`);
   return `<div class="border-t border-slate-100 p-4 space-y-4 bg-slate-50/60">
-    <div class="grid grid-cols-1 md:grid-cols-[1fr_190px] gap-3">
-      <div><label class="lbl">Titel / Ort</label><input id="d${i}-title" class="field font-semibold" value="${esc(d.title)}" placeholder="z.B. Ankunft in Arusha" onchange="setDay(${i},'title',this.value)"></div>
-      <div><label class="lbl">Tageskosten (ganze Gruppe)</label><input id="d${i}-cost" type="number" inputmode="decimal" class="field money" value="${esc(d.cost || 0)}" onchange="setDay(${i},'cost',this.value)"></div>
+    <div><label class="lbl">Titel / Ort</label><input id="d${i}-title" class="field font-semibold" value="${esc(d.title)}" placeholder="z.B. Ankunft in Arequipa" onchange="setDay(${i},'title',this.value)"></div>
+    <div><label class="lbl">Programm / Details</label>${ta(`d${i}-prog`, d.program, `setDay(${i},'program',this.value)`, 'Was steht an? Treffpunkte, Zeiten, Links …', 3)}</div>
+
+    <div class="rounded-xl border border-amber-200 bg-amber-50 p-3">
+      <div class="text-xs font-bold uppercase tracking-wide text-amber-800 mb-2">🏨 Übernachtung</div>
+      <div class="grid grid-cols-2 md:grid-cols-[2fr_2fr_1fr_1fr] gap-2">
+        <div class="col-span-2 md:col-span-1"><label class="lbl">Hotel</label><input id="d${i}-hotel" class="field" value="${esc(d.hotel)}" placeholder="Hotelname" onchange="setDay(${i},'hotel',this.value)"></div>
+        <div class="col-span-2 md:col-span-1"><label class="lbl">Adresse</label><input id="d${i}-haddr" class="field" value="${esc(d.hotelAddress)}" placeholder="für Karte & Reiseplan" onchange="setDay(${i},'hotelAddress',this.value)"></div>
+        <div><label class="lbl">Buchungsnr.</label><input id="d${i}-href" class="field" value="${esc(d.hotelRef)}" placeholder="optional" onchange="setDay(${i},'hotelRef',this.value)"></div>
+        <div><label class="lbl">Preis/Nacht total</label><input id="d${i}-hcost" type="number" inputmode="decimal" class="field money" value="${esc(d.hotelCost || 0)}" onchange="setDay(${i},'hotelCost',this.value)"></div>
+      </div>
     </div>
-    <div><label class="lbl">Programm / Details</label>${ta(`d${i}-prog`, d.program, `setDay(${i},'program',this.value)`, 'Was steht an? Ausflüge, Treffpunkte, Zeiten, Links …', 3)}</div>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-      <div><label class="lbl">🏨 Unterkunft</label><input id="d${i}-hotel" class="field" value="${esc(d.hotel)}" placeholder="Hotelname" onchange="setDay(${i},'hotel',this.value)"></div>
-      <div><label class="lbl">Adresse</label><input id="d${i}-haddr" class="field" value="${esc(d.hotelAddress)}" placeholder="für Karte & Reiseplan" onchange="setDay(${i},'hotelAddress',this.value)"></div>
-      <div><label class="lbl">Buchungsnr.</label><input id="d${i}-href" class="field" value="${esc(d.hotelRef)}" placeholder="optional" onchange="setDay(${i},'hotelRef',this.value)"></div>
-    </div>
+
     ${d.flights.map((f, j) => flightEditor(f, i, j)).join('')}
-    ${d.cars.map((c, j) => carEditor(c, i, j)).join('')}
+    ${d.transfers.map((x, j) => transferEditor(x, i, j)).join('')}
+    ${d.activities.map((x, j) => activityEditor(x, i, j)).join('')}
+    ${d.cars.map((x, j) => carEditor(x, i, j)).join('')}
     ${d.docs.length ? `<div><div class="lbl">Dokumente</div><div class="flex flex-wrap gap-2">${d.docs.map((x, j) => `
       <span class="inline-flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg pl-2.5 pr-1 py-1 text-xs">
         <a href="${esc(x.url)}" target="_blank" rel="noopener" class="font-semibold text-sky-700 max-w-[200px] truncate">📎 ${esc(x.name)}</a>
@@ -605,9 +636,20 @@ function planDayBody(d, i) {
       </span>`).join('')}</div></div>` : ''}
     <div class="flex flex-wrap gap-2">
       <button onclick="addItem(${i},'flights',{route:'',flightNo:'',time:'',bookingRef:'',cost:0})" class="chip bg-sky-100 text-sky-800">＋ ✈️ Flug</button>
+      <button onclick="addItem(${i},'transfers',{route:'',time:'',provider:'',bookingRef:'',cost:0})" class="chip bg-teal-100 text-teal-800">＋ 🚐 Transfer</button>
+      <button onclick="addItem(${i},'activities',{name:'',time:'',provider:'',bookingRef:'',cost:0})" class="chip bg-rose-100 text-rose-800">＋ 🎟 Aktivität</button>
       <button onclick="addItem(${i},'cars',{action:'Abholung',provider:'',vehicle:'',bookingRef:'',cost:0})" class="chip bg-violet-100 text-violet-800">＋ 🚗 Mietwagen</button>
       <input type="file" id="file-${i}" class="hidden" onchange="uploadFile(event,${i})">
       <button id="upbtn-${i}" onclick="pickFile(${i})" class="chip bg-slate-200 text-slate-700">＋ 📎 Dokument</button>
+    </div>
+
+    <div class="rounded-xl bg-white border border-slate-200 p-3 flex flex-wrap items-end justify-between gap-3">
+      <div class="min-w-0">
+        <div class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Tagestotal</div>
+        <div class="text-lg font-extrabold text-emerald-600 tabular-nums">CHF ${chf(c.group + c.flightsPP * n)} <span class="text-sm font-semibold text-slate-500">· ${chf(c.flightsPP + c.group / n)} p.P.</span></div>
+        <div class="text-[11px] text-slate-500">${parts.length ? parts.join(' · ') : 'Noch keine Kosten erfasst'}</div>
+      </div>
+      <div class="w-36"><label class="lbl">Übrige Kosten</label><input id="d${i}-cost" type="number" inputmode="decimal" class="field money" value="${esc(d.cost || 0)}" title="Weitere Kosten für die ganze Gruppe (z.B. Eintritte, Verpflegung)" onchange="setDay(${i},'cost',this.value)"></div>
     </div>
     <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-200">
       <div class="flex items-center gap-1.5">
@@ -630,6 +672,34 @@ function flightEditor(f, i, j) {
       <div><label class="lbl">Zeiten</label><input id="${p}-t" class="field" value="${esc(f.time)}" placeholder="10:05 – 21:40" onchange="${u('time')}"></div>
       <div><label class="lbl">Buchungsnr.</label><input id="${p}-b" class="field" value="${esc(f.bookingRef)}" placeholder="PNR" onchange="${u('bookingRef')}"></div>
       <div><label class="lbl">Preis p.P.</label><input id="${p}-c" type="number" inputmode="decimal" class="field money" value="${esc(f.cost || 0)}" onchange="${u('cost')}"></div>
+    </div>
+  </div>`;
+}
+
+function transferEditor(x, i, j) {
+  const p = `tr${i}-${j}`, u = k => `setItem(${i},'transfers',${j},'${k}',this.value)`;
+  return `<div class="rounded-xl border border-teal-200 bg-teal-50 p-3">
+    <div class="flex items-center justify-between mb-2"><span class="text-xs font-bold uppercase tracking-wide text-teal-800">🚐 Transfer</span><button onclick="delItem(${i},'transfers',${j},'Transfer')" class="icon-btn text-rose-500">✕</button></div>
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+      <div class="col-span-2 md:col-span-1"><label class="lbl">Von – Nach</label><input id="${p}-r" class="field" value="${esc(x.route)}" placeholder="Flughafen – Hotel" onchange="${u('route')}"></div>
+      <div><label class="lbl">Zeit</label><input id="${p}-t" class="field" value="${esc(x.time)}" placeholder="14:30" onchange="${u('time')}"></div>
+      <div><label class="lbl">Anbieter</label><input id="${p}-p" class="field" value="${esc(x.provider)}" placeholder="Shuttle, Taxi …" onchange="${u('provider')}"></div>
+      <div><label class="lbl">Buchungsnr.</label><input id="${p}-b" class="field" value="${esc(x.bookingRef)}" placeholder="optional" onchange="${u('bookingRef')}"></div>
+      <div class="col-span-2 md:col-span-1"><label class="lbl">Preis total</label><input id="${p}-c" type="number" inputmode="decimal" class="field money" value="${esc(x.cost || 0)}" onchange="${u('cost')}"></div>
+    </div>
+  </div>`;
+}
+
+function activityEditor(x, i, j) {
+  const p = `ac${i}-${j}`, u = k => `setItem(${i},'activities',${j},'${k}',this.value)`;
+  return `<div class="rounded-xl border border-rose-200 bg-rose-50 p-3">
+    <div class="flex items-center justify-between mb-2"><span class="text-xs font-bold uppercase tracking-wide text-rose-800">🎟 Aktivität</span><button onclick="delItem(${i},'activities',${j},'Aktivität')" class="icon-btn text-rose-500">✕</button></div>
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+      <div class="col-span-2 md:col-span-1"><label class="lbl">Aktivität</label><input id="${p}-n" class="field" value="${esc(x.name)}" placeholder="Stadtführung" onchange="${u('name')}"></div>
+      <div><label class="lbl">Zeit</label><input id="${p}-t" class="field" value="${esc(x.time)}" placeholder="09:00 – 12:00" onchange="${u('time')}"></div>
+      <div><label class="lbl">Anbieter / Treffpunkt</label><input id="${p}-p" class="field" value="${esc(x.provider)}" placeholder="optional" onchange="${u('provider')}"></div>
+      <div><label class="lbl">Buchungsnr.</label><input id="${p}-b" class="field" value="${esc(x.bookingRef)}" placeholder="optional" onchange="${u('bookingRef')}"></div>
+      <div class="col-span-2 md:col-span-1"><label class="lbl">Preis total</label><input id="${p}-c" type="number" inputmode="decimal" class="field money" value="${esc(x.cost || 0)}" onchange="${u('cost')}"></div>
     </div>
   </div>`;
 }
@@ -712,6 +782,22 @@ function travelDay(t, d, i, ti) {
       ${f.flightNo ? `<a class="inline-flex mt-2 text-xs font-bold text-sky-700 bg-white border border-sky-200 rounded-lg px-2.5 py-1.5" target="_blank" rel="noopener" href="https://www.google.com/search?q=${encodeURIComponent('Flugstatus ' + f.flightNo)}">Flugstatus prüfen ↗</a>` : ''}
     </div>`;
   });
+  d.transfers.forEach(x => {
+    if (!(x.route || x.provider || x.time)) return;
+    h += `<div class="mt-3 rounded-xl bg-teal-50 border border-teal-100 p-3">
+      <div class="font-bold text-slate-900">🚐 Transfer${x.route ? ' · ' + esc(x.route) : ''}</div>
+      ${x.time || x.provider ? `<div class="text-sm text-slate-700">${esc([x.time && '🕒 ' + x.time, x.provider].filter(Boolean).join(' · '))}</div>` : ''}
+      ${refLine(x.bookingRef)}
+    </div>`;
+  });
+  d.activities.forEach(x => {
+    if (!(x.name || x.provider || x.time)) return;
+    h += `<div class="mt-3 rounded-xl bg-rose-50 border border-rose-100 p-3">
+      <div class="font-bold text-slate-900">🎟 ${esc(x.name || 'Aktivität')}</div>
+      ${x.time || x.provider ? `<div class="text-sm text-slate-700">${esc([x.time && '🕒 ' + x.time, x.provider].filter(Boolean).join(' · '))}</div>` : ''}
+      ${refLine(x.bookingRef)}${x.provider ? mapsBtn(x.provider) : ''}
+    </div>`;
+  });
   d.cars.forEach(c => {
     if (!(c.provider || c.vehicle)) return;
     h += `<div class="mt-3 rounded-xl bg-violet-50 border border-violet-100 p-3">
@@ -745,6 +831,8 @@ function renderPrint() {
     if (d.program) s += `<div style="white-space:pre-line">${esc(d.program)}</div>`;
     const sub = [];
     d.flights.forEach(f => { if (f.route || f.flightNo || f.time) sub.push(`Flug: ${esc([f.route, f.time, f.flightNo].filter(Boolean).join(' | '))}${f.bookingRef ? `<span class="only-plan"> · Buchung ${esc(f.bookingRef)}</span>` : ''}`); });
+    d.transfers.forEach(x => { if (x.route || x.provider || x.time) sub.push(`Transfer: ${esc([x.route, x.time, x.provider].filter(Boolean).join(' | '))}${x.bookingRef ? `<span class="only-plan"> · Buchung ${esc(x.bookingRef)}</span>` : ''}`); });
+    d.activities.forEach(x => { if (x.name || x.provider || x.time) sub.push(`Aktivität: ${esc([x.name, x.time, x.provider].filter(Boolean).join(' | '))}${x.bookingRef ? `<span class="only-plan"> · Buchung ${esc(x.bookingRef)}</span>` : ''}`); });
     d.cars.forEach(c => { if (c.provider || c.vehicle) sub.push(`Mietwagen (${esc(c.action || '')}): ${esc([c.vehicle, c.provider].filter(Boolean).join(' bei '))}${c.bookingRef ? `<span class="only-plan"> · Buchung ${esc(c.bookingRef)}</span>` : ''}`); });
     if (d.hotel) sub.push(`Unterkunft: ${esc(d.hotel)}<span class="only-plan">${d.hotelAddress ? ', ' + esc(d.hotelAddress) : ''}${d.hotelRef ? ' · Buchung ' + esc(d.hotelRef) : ''}</span>`);
     if (d.docs.length) sub.push(`<span class="only-plan">Dokumente: ${d.docs.map(x => `<a href="${esc(x.url)}">${esc(x.name)}</a>`).join(', ')}</span>`);
@@ -752,9 +840,10 @@ function renderPrint() {
     return `<tr><td class="pr-date">${dl}</td><td>${s}</td></tr>`;
   }).join('');
 
-  const priceRows = [`<tr><td>Flüge pro Person</td><td class="r">CHF ${chf(T.flightsPP)}.–</td></tr>`];
-  if (T.cars) priceRows.push(`<tr><td>Mietwagen (Total CHF ${chf(T.cars)} ÷ ${T.n})</td><td class="r">CHF ${chf(T.cars / T.n)}.–</td></tr>`);
-  if (T.dayCosts) priceRows.push(`<tr><td>Unterkünfte & Leistungen vor Ort (Total CHF ${chf(T.dayCosts)} ÷ ${T.n})</td><td class="r">CHF ${chf(T.dayCosts / T.n)}.–</td></tr>`);
+  const priceRows = [];
+  if (T.flightsPP) priceRows.push(`<tr><td>Flüge pro Person</td><td class="r">CHF ${chf(T.flightsPP)}.–</td></tr>`);
+  [['hotel', 'Unterkünfte'], ['transfers', 'Transfers'], ['activities', 'Aktivitäten & Ausflüge'], ['cars', 'Mietwagen'], ['other', 'Übrige Leistungen']]
+    .forEach(([k, label]) => { if (T[k]) priceRows.push(`<tr><td>${label} <span class="pr-sub">(Total CHF ${chf(T[k])} ÷ ${T.n})</span></td><td class="r">CHF ${chf(T[k] / T.n)}.–</td></tr>`); });
 
   $('print-root').innerHTML = `
     <div class="pr-head"><div class="pr-brand">${esc(BRAND)}</div><div class="pr-doc"><span class="only-offer">Reisevorschlag</span><span class="only-plan">Reiseplan</span></div></div>
